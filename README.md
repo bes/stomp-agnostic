@@ -1,7 +1,7 @@
 # STOMP Agnostic
 
 [![crates.io](https://img.shields.io/crates/v/stomp-agnostic.svg)](https://crates.io/crates/stomp-agnostic)
-[![docs.rs](https://docs.rs/stomp-agnostic/badge.svg)](https://docs.rs/async-stomp/latest/stomp_agnostic/)
+[![docs.rs](https://docs.rs/stomp-agnostic/badge.svg)](https://docs.rs/stomp-agnostic/latest/stomp_agnostic/)
 
 A transport and async agnostic [STOMP](https://stomp.github.io/) library for Rust.
 

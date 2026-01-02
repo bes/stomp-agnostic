@@ -1,6 +1,6 @@
 [package]
 name = "stomp-agnostic"
-version = "0.7.0"
+version = "0.7.1"
 description = "A transport agnostic, asynchronous, STOMP client"
 authors = [
     "Erik Živković <erik@zkc.se>",
