@@ -1,24 +1,33 @@
-//! tokio-stomp - A library for asynchronous streaming of STOMP messages
+//! # STOMP Agnostic
 //!
-//! This library provides an async Rust implementation of the STOMP (Simple/Streaming Text Oriented Messaging Protocol),
-//! built on the tokio stack. It allows for creating STOMP clients that can connect to message brokers,
-//! subscribe to destinations, send messages, and receive messages asynchronously.
+//! `stomp-agnostic` - A transport agnostic library for handling of STOMP messages
 //!
-//! The primary types exposed by this library are:
-//! - `client::Connector` - For establishing connections to STOMP servers
-//! - `client::Subscriber` - For creating subscription messages
-//! - `Message<T>` - For representing STOMP protocol messages
-//! - `ToServer` - Enum of all message types that can be sent to a server
-//! - `FromServer` - Enum of all message types that can be received from a server
+//! This library exposes STOMP functionality through the [StompHandle](client::StompHandle) type.
+//! The `StompHandle` needs an implementation of [Transport](transport::Transport).
+//!
+//! `stomp-agnostic` is both transport agnostic, and async agnostic.
+//!
+//! # (Non-) Performance
+//! This crate does not have a specific focus on performance.
+//!
+//! # Transport agnostic
+//! Other STOMP libraries, like [async-stomp](https://github.com/snaggen/async-stomp),
+//! [wstomp](https://crates.io/crates/wstomp), etc. focus on one, or a few, specific transport
+//! methods such as TCP or WebSockets. This crate on the other hand, exposes a trait [Transport](transport::Transport)
+//! and the implementor is responsible for the transport. This makes this crate compatible with
+//! e.g. [tokio-tungstenite](https://crates.io/crates/tokio-tungstenite), but you have to implement
+//! the `Transport` trait yourself, there is nothing implemented for `tokio-tungstenite` out-of-the box.
+//!
+//! # Async agnostic
+//! This crate does not depend on a specific async stack. Bring your own.
 
+use bytes::{Bytes, BytesMut};
 use custom_debug_derive::Debug as CustomDebug;
 use frame::Frame;
 
 pub mod client;
 mod frame;
-
-/// Type alias for library results that use anyhow::Error
-pub(crate) type Result<T> = std::result::Result<T, anyhow::Error>;
+pub mod transport;
 
 /// A representation of a STOMP frame
 ///
@@ -121,7 +130,7 @@ impl Message<FromServer> {
     ///
     /// This internal method handles conversion from the low-level Frame
     /// representation to the high-level Message representation.
-    fn from_frame(frame: Frame) -> Result<Message<FromServer>> {
+    fn from_frame(frame: Frame) -> anyhow::Result<Message<FromServer>> {
         frame.to_server_msg()
     }
 }
@@ -138,7 +147,6 @@ pub enum ToServer {
     /// Connection request message
     ///
     /// First frame sent to the server to establish a STOMP session.
-    #[doc(hidden)] // The user shouldn't need to know about this one
     Connect {
         /// Protocol versions the client supports
         accept_version: String,
@@ -279,12 +287,21 @@ impl Message<ToServer> {
         frame
     }
 
+    /// Converts the message to a [Frame] and then serializes the frame as bytes. This is useful
+    /// for implementors that need to implement the [Transport](transport::Transport) trait.
+    pub fn into_bytes(self) -> Bytes {
+        let mut bytes_mut = BytesMut::new();
+        let frame = self.to_frame();
+        frame.serialize(&mut bytes_mut);
+        Bytes::from_owner(bytes_mut)
+    }
+
     /// Convert a Frame into a Message<ToServer>
     ///
     /// This internal method handles conversion from the low-level Frame
     /// representation to the high-level Message representation.
     #[allow(dead_code)]
-    fn from_frame(frame: Frame) -> Result<Message<ToServer>> {
+    fn from_frame(frame: Frame) -> anyhow::Result<Message<ToServer>> {
         frame.to_client_msg()
     }
 }

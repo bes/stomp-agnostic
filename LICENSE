@@ -1,5 +1,5 @@
 The Work is provided under the terms of EUPL 1.2 as per
-the file LISENCE.EUPL
+the file LICENSE.EUPL
 
 This work is based on tokio-stomp-2 (https://github.com/alexkunde/tokio-stomp-2)
 which is release under the MIT lisence as per the file LISENCE.MIT, and then

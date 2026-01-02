@@ -1,4 +1,4 @@
-use crate::{AckMode, FromServer, Message, Result, ToServer};
+use crate::{AckMode, FromServer, Message, ToServer};
 use anyhow::{anyhow, bail};
 use bytes::{BufMut, BytesMut};
 use std::borrow::Cow;
@@ -324,7 +324,10 @@ fn optional_headers<'a>(
 ///
 /// This function looks up a header by key and returns its value as a String.
 /// If the header is not found, it returns an error.
-fn expect_header<'a>(headers: &'a [(&'a [u8], Cow<'a, [u8]>)], key: &'a str) -> Result<String> {
+fn expect_header<'a>(
+    headers: &'a [(&'a [u8], Cow<'a, [u8]>)],
+    key: &'a str,
+) -> anyhow::Result<String> {
     fetch_header(headers, key).ok_or_else(|| anyhow!("Expected header '{}' missing", key))
 }
 
@@ -334,7 +337,7 @@ impl<'a> Frame<'a> {
     /// This method interprets the frame as a client-to-server message
     /// and converts it to the appropriate ToServer enum variant.
     #[allow(dead_code)]
-    pub(crate) fn to_client_msg(&'a self) -> Result<Message<ToServer>> {
+    pub(crate) fn to_client_msg(&'a self) -> anyhow::Result<Message<ToServer>> {
         use self::expect_header as eh;
         use self::fetch_header as fh;
         use ToServer::*;
@@ -454,7 +457,7 @@ impl<'a> Frame<'a> {
     ///
     /// This method interprets the frame as a server-to-client message
     /// and converts it to the appropriate FromServer enum variant.
-    pub(crate) fn to_server_msg(&'a self) -> Result<Message<FromServer>> {
+    pub(crate) fn to_server_msg(&'a self) -> anyhow::Result<Message<FromServer>> {
         use self::expect_header as eh;
         use self::fetch_header as fh;
         use FromServer::{Connected, Error, Message as Msg, Receipt};
@@ -530,7 +533,7 @@ fn opt_str_to_bytes(s: &Option<String>) -> Option<Cow<'_, [u8]>> {
 /// This helper function parses the heart-beat header value which is
 /// in the format "cx,cy" where cx is the client's heartbeat interval
 /// and cy is the server's heartbeat interval.
-fn parse_heartbeat(hb: &str) -> Result<(u32, u32)> {
+fn parse_heartbeat(hb: &str) -> anyhow::Result<(u32, u32)> {
     let mut split = hb.splitn(2, ',');
     let left = split.next().ok_or_else(|| anyhow!("Bad heartbeat"))?;
     let right = split.next().ok_or_else(|| anyhow!("Bad heartbeat"))?;

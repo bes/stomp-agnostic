@@ -1,34 +1,30 @@
 [package]
-name = "async-stomp"
-version = "0.6.2"
-description = "An asynchronous streaming STOMP client"
+name = "stomp-agnostic"
+version = "0.7.0"
+description = "A transport agnostic, asynchronous, STOMP client"
 authors = [
+    "Erik Živković <erik@zkc.se>",
     "Mattias Eriksson <snaggen@mayam.com>",
     "Alex Whitney <adwhit@fastmail.com>",
     "Jens Walter <jens@apimeister.com>",
     "Alexander Kunde <a.kunde@outlook.com>",
     "Jacques Joubert <jjoubert@kigo.io>",
 ]
-repository = "https://github.com/snaggen/async-stomp"
-homepage = "https://github.com/snaggen/async-stomp"
-keywords = ["stomp", "tokio", "streaming", "async"]
+repository = "https://github.com/bes/stomp-agnostic"
+homepage = "https://github.com/bes/stomp-agnostic"
+keywords = ["stomp", "async"]
 license = "EUPL-1.2"
 readme = "README.md"
 categories = ["network-programming", "parser-implementations"]
 edition = "2024"
 
 [dependencies]
-bytes = "1.10.1"
+bytes = "1.11.0"
 custom_debug_derive = "0.6.2"
-anyhow = "1.0"
-futures = "0.3"
-tokio = { version = "1", features = ["net"] }
-tokio-util = { version = "0.7", features = ["codec"] }
-winnow = "0.7"
-typed-builder = "0.22.0"
-tokio-rustls = "0.26.2"
-webpki-roots = "1.0.2"
-rustls = "0.23.31"
+anyhow = "1.0.100"
+winnow = "0.7.14"
+async-trait = "0.1.89"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["time", "macros", "rt-multi-thread"] }
+futures = "0.3"
