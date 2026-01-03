@@ -1,22 +1,31 @@
-use crate::transport::{BufferedTransport, Transport};
-use crate::{FromServer, Message, ToServer};
+use crate::transport::{BufferedTransport, Response, Transport};
+use crate::{FromServer, Message, ReadError, ToServer, WriteError};
 use anyhow::anyhow;
+use std::fmt::Debug;
 
 /// A handle that reads and writes STOMP messages given an implementation of [Transport].
-pub struct StompHandle {
-    transport: BufferedTransport,
+pub struct StompHandle<T>
+where
+    T: Transport,
+    T::ProtocolSideChannel: Debug,
+{
+    transport: BufferedTransport<T>,
 }
 
-impl StompHandle {
+impl<T> StompHandle<T>
+where
+    T: Transport,
+    T::ProtocolSideChannel: Debug,
+{
     /// Creates a new [StompHandle] for your code to interface with.
     /// Requires an implementation of [Transport].
     pub async fn connect(
-        transport: Box<dyn Transport>,
+        transport: T,
         virtualhost: String,
         login: Option<String>,
         passcode: Option<String>,
         headers: Vec<(String, String)>,
-    ) -> anyhow::Result<StompHandle> {
+    ) -> anyhow::Result<StompHandle<T>> {
         let transport = client_handshake(
             BufferedTransport::new(transport),
             virtualhost.clone(),
@@ -30,32 +39,23 @@ impl StompHandle {
     }
 
     /// Send a STOMP message through the underlying transport
-    pub async fn send_message(&mut self, message: Message<ToServer>) -> anyhow::Result<()> {
+    pub async fn send_message(&mut self, message: Message<ToServer>) -> Result<(), WriteError> {
         self.transport.send(message).await
     }
 
     /// Read a STOMP message from the underlying transport
-    pub async fn read_message(&mut self) -> anyhow::Result<Message<FromServer>> {
+    pub async fn read_response(&mut self) -> Result<Response<T::ProtocolSideChannel>, ReadError> {
         self.transport.next().await
     }
 
     /// Consume the [StompHandle] to get the original [Transport] back.
-    /// You can then use [Any](std::any::Any) downcasting to convert it back to your own type.
-    ///
-    /// Example:
-    /// ```rust,ignore
-    /// match (&mut *transport as &mut dyn Any).downcast_mut::<MyTransportImpl>() {
-    ///     Some(my_transport) => {
-    ///         // Use my_transport
-    ///         my_transport.write.send(...
-    ///     }
-    ///     None => {
-    ///         // Oops, should not happen
-    ///     }
-    /// };
-    /// ```
-    pub fn into_transport(self) -> Box<dyn Transport> {
+    pub fn into_transport(self) -> T {
         self.transport.into_transport()
+    }
+
+    /// Get a mutable reference to the transport, to be able to handle e.g. WebSocket Ping/Pong
+    pub fn as_mut_transport(&mut self) -> &mut T {
+        self.transport.as_mut_inner()
     }
 }
 
@@ -64,13 +64,17 @@ impl StompHandle {
 /// This function sends a CONNECT frame to the server and waits for
 /// a CONNECTED response. If the server responds with anything else,
 /// the handshake is considered failed.
-async fn client_handshake(
-    mut transport: BufferedTransport,
+async fn client_handshake<T>(
+    mut transport: BufferedTransport<T>,
     virtualhost: String,
     login: Option<String>,
     passcode: Option<String>,
     headers: Vec<(String, String)>,
-) -> anyhow::Result<BufferedTransport> {
+) -> anyhow::Result<BufferedTransport<T>>
+where
+    T: Transport,
+    T::ProtocolSideChannel: Debug,
+{
     // Convert custom headers to the binary format expected by the protocol
     let extra_headers = headers
         .iter()
@@ -93,12 +97,17 @@ async fn client_handshake(
     transport.send(connect).await?;
 
     // Receive and process the server's reply
-    let msg = transport.next().await?;
+    let response = transport.next().await?;
 
-    // Check if the reply is a CONNECTED frame
-    if let FromServer::Connected { .. } = msg.content {
-        Ok(transport)
-    } else {
-        Err(anyhow!("unexpected reply: {:?}", msg))
+    match response {
+        Response::Message(msg) => {
+            // Check if the reply is a CONNECTED frame
+            if let FromServer::Connected { .. } = msg.content {
+                Ok(transport)
+            } else {
+                Err(anyhow!("Unexpected response: {msg:?}"))
+            }
+        }
+        Response::Custom(custom) => Err(anyhow!("Unexpected response: {custom:?}")),
     }
 }

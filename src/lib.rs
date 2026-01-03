@@ -25,7 +25,7 @@ use bytes::{Bytes, BytesMut};
 use custom_debug_derive::Debug as CustomDebug;
 use frame::Frame;
 pub use handle::StompHandle;
-pub use transport::Transport;
+pub use transport::{ReadError, ReadResponse, Response, Transport, WriteError};
 
 mod frame;
 mod handle;
