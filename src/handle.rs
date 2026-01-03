@@ -29,39 +29,34 @@ impl StompHandle {
         Ok(StompHandle { transport })
     }
 
+    /// Send a STOMP message through the underlying transport
     pub async fn send_message(&mut self, message: Message<ToServer>) -> anyhow::Result<()> {
         self.transport.send(message).await
     }
 
+    /// Read a STOMP message from the underlying transport
     pub async fn read_message(&mut self) -> anyhow::Result<Message<FromServer>> {
         self.transport.next().await
     }
-}
 
-/// Create an instance of a [ToServer::Subscribe] message that can be sent to the STOMP server
-/// to start a subscription.
-pub fn subscribe_message(
-    destination: String,
-    id: String,
-    headers: Option<Vec<(String, String)>>,
-) -> Message<ToServer> {
-    // Create the basic Subscribe message
-    let mut msg: Message<ToServer> = ToServer::Subscribe {
-        destination,
-        id,
-        ack: None,
+    /// Consume the [StompHandle] to get the original [Transport] back.
+    /// You can then use [Any](std::any::Any) downcasting to convert it back to your own type.
+    ///
+    /// Example:
+    /// ```rust,ignore
+    /// match (&mut *transport as &mut dyn Any).downcast_mut::<MyTransportImpl>() {
+    ///     Some(my_transport) => {
+    ///         // Use my_transport
+    ///         my_transport.write.send(...
+    ///     }
+    ///     None => {
+    ///         // Oops, should not happen
+    ///     }
+    /// };
+    /// ```
+    pub fn into_transport(self) -> Box<dyn Transport> {
+        self.transport.into_transport()
     }
-    .into();
-
-    // Add any custom headers
-    if let Some(headers) = headers {
-        msg.extra_headers = headers
-            .iter()
-            .map(|(k, v)| (k.as_bytes().to_vec(), v.as_bytes().to_vec()))
-            .collect();
-    }
-
-    msg
 }
 
 /// Performs the STOMP protocol handshake with the server

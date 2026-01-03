@@ -2,12 +2,13 @@ use crate::{FromServer, Message, ToServer, frame};
 use anyhow::bail;
 use async_trait::async_trait;
 use bytes::{Buf, Bytes, BytesMut};
+use std::any::Any;
 use winnow::Partial;
 use winnow::error::ErrMode;
 use winnow::stream::Offset;
 
 #[async_trait]
-pub trait Transport: Send + Sync {
+pub trait Transport: Any + Send + Sync {
     async fn write(&mut self, message: Message<ToServer>) -> anyhow::Result<()>;
     async fn read(&mut self) -> anyhow::Result<Bytes>;
 }
@@ -62,5 +63,9 @@ impl BufferedTransport {
                 return Ok(message);
             }
         }
+    }
+
+    pub(crate) fn into_transport(self) -> Box<dyn Transport> {
+        self.transport
     }
 }

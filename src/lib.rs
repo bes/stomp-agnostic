@@ -2,8 +2,8 @@
 //!
 //! `stomp-agnostic` - A transport agnostic library for handling of STOMP messages
 //!
-//! This library exposes STOMP functionality through the [StompHandle](client::StompHandle) type.
-//! The `StompHandle` needs an implementation of [Transport](transport::Transport).
+//! This library exposes STOMP functionality through the [StompHandle] type.
+//! The `StompHandle` needs an implementation of [Transport].
 //!
 //! `stomp-agnostic` is both transport agnostic, and async agnostic.
 //!
@@ -24,10 +24,12 @@
 use bytes::{Bytes, BytesMut};
 use custom_debug_derive::Debug as CustomDebug;
 use frame::Frame;
+pub use handle::StompHandle;
+pub use transport::Transport;
 
-pub mod client;
 mod frame;
-pub mod transport;
+mod handle;
+mod transport;
 
 /// A representation of a STOMP frame
 ///
