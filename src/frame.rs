@@ -548,12 +548,11 @@ impl ToServer {
     pub(crate) fn to_frame<'a>(&'a self) -> Frame<'a> {
         use self::opt_str_to_bytes as sb;
         use Cow::*;
-        use ToServer::*;
 
         // Create a Frame with the appropriate command, headers, and body
         // based on the ToServer variant
         match *self {
-            Connect {
+            ToServer::Connect {
                 ref accept_version,
                 ref host,
                 ref login,
@@ -573,10 +572,10 @@ impl ToServer {
                 ],
                 None,
             ),
-            Disconnect { ref receipt } => {
+            ToServer::Disconnect { ref receipt } => {
                 Frame::new(b"DISCONNECT", &[(b"receipt", sb(receipt))], None)
             }
-            Subscribe {
+            ToServer::Subscribe {
                 ref destination,
                 ref id,
                 ref ack,
@@ -596,12 +595,12 @@ impl ToServer {
                 ],
                 None,
             ),
-            Unsubscribe { ref id } => Frame::new(
+            ToServer::Unsubscribe { ref id } => Frame::new(
                 b"UNSUBSCRIBE",
                 &[(b"id", Some(Borrowed(id.as_bytes())))],
                 None,
             ),
-            Send {
+            ToServer::Send {
                 ref destination,
                 ref transaction,
                 ref headers,
@@ -622,7 +621,7 @@ impl ToServer {
 
                 Frame::new(b"SEND", &hdr, body.as_ref().map(|v| v.as_ref()))
             }
-            Ack {
+            ToServer::Ack {
                 ref id,
                 ref transaction,
             } => Frame::new(
@@ -633,7 +632,7 @@ impl ToServer {
                 ],
                 None,
             ),
-            Nack {
+            ToServer::Nack {
                 ref id,
                 ref transaction,
             } => Frame::new(
@@ -644,17 +643,17 @@ impl ToServer {
                 ],
                 None,
             ),
-            Begin { ref transaction } => Frame::new(
+            ToServer::Begin { ref transaction } => Frame::new(
                 b"BEGIN",
                 &[(b"transaction", Some(Borrowed(transaction.as_bytes())))],
                 None,
             ),
-            Commit { ref transaction } => Frame::new(
+            ToServer::Commit { ref transaction } => Frame::new(
                 b"COMMIT",
                 &[(b"transaction", Some(Borrowed(transaction.as_bytes())))],
                 None,
             ),
-            Abort { ref transaction } => Frame::new(
+            ToServer::Abort { ref transaction } => Frame::new(
                 b"ABORT",
                 &[(b"transaction", Some(Borrowed(transaction.as_bytes())))],
                 None,
@@ -663,9 +662,65 @@ impl ToServer {
     }
 }
 
+impl FromServer {
+    pub(crate) fn to_frame<'a>(&'a self) -> Frame<'a> {
+        use self::opt_str_to_bytes as sb;
+        use Cow::*;
+
+        match *self {
+            FromServer::Connected {
+                ref version,
+                ref session,
+                ref server,
+                ref heartbeat,
+            } => Frame::new(
+                b"CONNECTED",
+                &[
+                    (b"version", Some(Borrowed(version.as_bytes()))),
+                    (b"session", sb(session)),
+                    (b"server", sb(server)),
+                    (b"heart-beat", sb(heartbeat)),
+                ],
+                None,
+            ),
+            FromServer::Message {
+                ref destination,
+                ref message_id,
+                ref subscription,
+                ref headers,
+                ref body,
+            } => {
+                let mut hdr: Vec<HeaderTuple> = vec![
+                    (b"subscription", Some(Borrowed(subscription.as_bytes()))),
+                    (b"message-id", Some(Borrowed(message_id.as_bytes()))),
+                    (b"destination", Some(Borrowed(destination.as_bytes()))),
+                ];
+
+                for (key, val) in headers {
+                    hdr.push((key.as_bytes(), Some(Borrowed(val.as_bytes()))));
+                }
+
+                Frame::new(b"MESSAGE", &hdr, body.as_ref().map(|v| v.as_ref()))
+            }
+            FromServer::Receipt { ref receipt_id } => Frame::new(
+                b"RECEIPT",
+                &[(b"receipt-id", Some(Borrowed(receipt_id.as_bytes())))],
+                None,
+            ),
+            FromServer::Error {
+                ref message,
+                ref body,
+            } => Frame::new(
+                b"ERROR",
+                &[(b"message", sb(message))],
+                body.as_ref().map(|v| v.as_ref()),
+            ),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     /// For all Frames Client -> Server

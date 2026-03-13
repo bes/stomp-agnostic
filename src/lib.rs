@@ -1,31 +1,51 @@
 //! # STOMP Agnostic
 //!
-//! `stomp-agnostic` - A transport agnostic library for handling of STOMP messages
+//! `stomp-agnostic` - A transport and async agnostic library for handling of STOMP messages
 //!
-//! This library exposes STOMP functionality through the [StompHandle] type.
-//! The `StompHandle` needs an implementation of [Transport].
+//! This library exposes _client_ STOMP functionality through the [ClientStompHandle] type.
+//! The `ClientStompHandle` needs an implementation of [ClientTransport].
 //!
-//! `stomp-agnostic` is both transport agnostic, and async agnostic.
+//! This library also exposes _server_ STOMP functionality through the [ServerStompHandle] type.
+//! The `ServerStompHandle` needs an implementation of [ServerTransport].
 //!
-//! # (Non-) Performance
+//! `stomp-agnostic` is both transport agnostic and async agnostic.
+//!
+//! ## (Non-) Performance
 //! This crate does not have a specific focus on performance.
 //!
-//! # Transport agnostic
+//! ## Transport agnostic
 //! Other STOMP libraries, like [async-stomp](https://github.com/snaggen/async-stomp),
 //! [wstomp](https://crates.io/crates/wstomp), etc. focus on one, or a few, specific transport
-//! methods such as TCP or WebSockets. This crate on the other hand, exposes a trait [Transport](transport::Transport)
-//! and the implementor is responsible for the transport. This makes this crate compatible with
-//! e.g. [tokio-tungstenite](https://crates.io/crates/tokio-tungstenite), but you have to implement
-//! the `Transport` trait yourself, there is nothing implemented for `tokio-tungstenite` out-of-the box.
+//! methods such as TCP or WebSockets. This crate on the other hand, exposes two traits,
+//! [ClientTransport] and [ServerTransport] and the implementor is responsible for the transport.
+//! This makes this crate compatible with e.g. [tokio-tungstenite](https://crates.io/crates/tokio-tungstenite),
+//! but you have to implement the `Transport` trait yourself, there is nothing implemented for
+//! `tokio-tungstenite` out-of-the box.
 //!
-//! # Async agnostic
+//! ## Async agnostic
 //! This crate does not depend on a specific async stack. Bring your own.
+//!
+//! ## High level STOMP interface and low level control of the transport
+//! `ClientStompHandle` and `ServerStompHandle` are the high-level APIs to use when sending and
+//! receiving STOMP messages, but `stomp-agnostic` also makes it easy to get a hold of the
+//! underlying transport implementation, both as an exclusive refernce `&mut T` and consuming the
+//! handle itself to get the original `T: ClientTransport` or `T: ServerTransport` back, to perform
+//! low-level cleanup at any time, usually at the end of a session. This is accomplished through
+//! [ClientStompHandle::into_transport], [ClientStompHandle::as_mut_transport],
+//! [ServerStompHandle::into_transport], and [ServerStompHandle::as_mut_transport].
+//!
+//! ## Examples
+//! There are two examples: one implementing a basic WebSocket STOMP client using
+//! `tokio-tungstenite`, and another implementing a basic WebSocket STOMP server using `axum`.
 
 use bytes::{Bytes, BytesMut};
 use custom_debug_derive::Debug as CustomDebug;
 use frame::Frame;
-pub use handle::StompHandle;
-pub use transport::{ReadError, ReadResponse, Response, Transport, WriteError};
+pub use handle::client::ClientStompHandle;
+pub use handle::server::ServerStompHandle;
+pub use transport::client::{ClientTransport, ServerResponse};
+pub use transport::server::{ClientData, ServerTransport};
+pub use transport::{ReadData, ReadError, WriteError};
 
 mod frame;
 mod handle;
@@ -124,9 +144,19 @@ pub enum FromServer {
 
 // TODO tidy this lot up with traits?
 impl Message<FromServer> {
-    // fn to_frame<'a>(&'a self) -> Frame<'a> {
-    //     unimplemented!()
-    // }
+    fn to_frame<'a>(&'a self) -> Frame<'a> {
+        let mut frame = self.content.to_frame();
+        // Add any extra headers to the frame
+        frame.add_extra_headers(&self.extra_headers);
+        frame
+    }
+
+    pub fn into_bytes(self) -> Bytes {
+        let mut bytes_mut = BytesMut::new();
+        let frame = self.to_frame();
+        frame.serialize(&mut bytes_mut);
+        Bytes::from_owner(bytes_mut)
+    }
 
     /// Convert a Frame into a Message<FromServer>
     ///
@@ -279,7 +309,7 @@ pub enum AckMode {
 impl Message<ToServer> {
     /// Convert this message to a low-level Frame
     ///
-    /// This method converts the high-level Message to the low-level Frame
+    /// This method converts the high-level [Message] to the low-level Frame
     /// representation needed for serialization.
     fn to_frame<'a>(&'a self) -> Frame<'a> {
         // Create a frame from the message content
@@ -289,8 +319,8 @@ impl Message<ToServer> {
         frame
     }
 
-    /// Converts the message to a [Frame] and then serializes the frame as bytes. This is useful
-    /// for implementors that need to implement the [Transport](transport::Transport) trait.
+    /// Converts the message to a Frame and then serializes the frame as bytes. This is useful
+    /// for implementors that need to implement the [ClientTransport] trait.
     pub fn into_bytes(self) -> Bytes {
         let mut bytes_mut = BytesMut::new();
         let frame = self.to_frame();
@@ -308,14 +338,14 @@ impl Message<ToServer> {
     }
 }
 
-/// Implement From<ToServer> for Message<ToServer> to allow easy conversion
+/// Implement `From<ToServer>` for `Message<ToServer>` to allow easy conversion
 ///
-/// This allows ToServer enum variants to be easily converted to a Message
+/// This allows [ToServer] enum variants to be easily converted to a [Message]
 /// with empty extra_headers, which is a common need when sending messages.
 impl From<ToServer> for Message<ToServer> {
-    /// Convert a ToServer enum into a Message<ToServer>
+    /// Convert a [ToServer] enum into a `Message<ToServer>`
     ///
-    /// This creates a Message with the given content and empty extra_headers.
+    /// This creates a [Message] with the given content and empty extra_headers.
     fn from(content: ToServer) -> Message<ToServer> {
         Message {
             content,

@@ -1,31 +1,31 @@
-use crate::transport::{BufferedTransport, Response, Transport};
+use crate::transport::client::{BufferedTransport, ClientTransport, ServerResponse};
 use crate::{FromServer, Message, ReadError, ToServer, WriteError};
 use anyhow::anyhow;
 use std::fmt::Debug;
 
-/// A handle that reads and writes STOMP messages given an implementation of [Transport].
-pub struct StompHandle<T>
+/// A handle that reads and writes STOMP messages given an implementation of [ClientTransport].
+pub struct ClientStompHandle<T>
 where
-    T: Transport,
+    T: ClientTransport,
     T::ProtocolSideChannel: Debug,
 {
     transport: BufferedTransport<T>,
 }
 
-impl<T> StompHandle<T>
+impl<T> ClientStompHandle<T>
 where
-    T: Transport,
+    T: ClientTransport,
     T::ProtocolSideChannel: Debug,
 {
-    /// Creates a new [StompHandle] for your code to interface with.
-    /// Requires an implementation of [Transport].
+    /// Creates a new [ClientStompHandle] for your code to interface with.
+    /// Requires an implementation of [ClientTransport].
     pub async fn connect(
         transport: T,
         virtualhost: String,
         login: Option<String>,
         passcode: Option<String>,
         headers: Vec<(String, String)>,
-    ) -> anyhow::Result<StompHandle<T>> {
+    ) -> anyhow::Result<ClientStompHandle<T>> {
         let transport = client_handshake(
             BufferedTransport::new(transport),
             virtualhost.clone(),
@@ -35,7 +35,7 @@ where
         )
         .await?;
 
-        Ok(StompHandle { transport })
+        Ok(ClientStompHandle { transport })
     }
 
     /// Send a STOMP message through the underlying transport
@@ -44,11 +44,13 @@ where
     }
 
     /// Read a STOMP message from the underlying transport
-    pub async fn read_response(&mut self) -> Result<Response<T::ProtocolSideChannel>, ReadError> {
+    pub async fn read_response(
+        &mut self,
+    ) -> Result<ServerResponse<T::ProtocolSideChannel>, ReadError> {
         self.transport.next().await
     }
 
-    /// Consume the [StompHandle] to get the original [Transport] back.
+    /// Consume the [ClientStompHandle] to get the original [ClientTransport] back.
     pub fn into_transport(self) -> T {
         self.transport.into_transport()
     }
@@ -72,7 +74,7 @@ async fn client_handshake<T>(
     headers: Vec<(String, String)>,
 ) -> anyhow::Result<BufferedTransport<T>>
 where
-    T: Transport,
+    T: ClientTransport,
     T::ProtocolSideChannel: Debug,
 {
     // Convert custom headers to the binary format expected by the protocol
@@ -100,7 +102,7 @@ where
     let response = transport.next().await?;
 
     match response {
-        Response::Message(msg) => {
+        ServerResponse::Message(msg) => {
             // Check if the reply is a CONNECTED frame
             if let FromServer::Connected { .. } = msg.content {
                 Ok(transport)
@@ -108,6 +110,6 @@ where
                 Err(anyhow!("Unexpected response: {msg:?}"))
             }
         }
-        Response::Custom(custom) => Err(anyhow!("Unexpected response: {custom:?}")),
+        ServerResponse::Custom(custom) => Err(anyhow!("Unexpected response: {custom:?}")),
     }
 }
