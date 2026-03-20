@@ -167,37 +167,25 @@ impl ClientTransport for WsTransport {
     }
 
     async fn read(&mut self) -> Result<ReadData<Self::ProtocolSideChannel>, ReadError> {
-        loop {
-            let message = self
-                .ws_stream
-                .next()
-                .await
-                .transpose()
-                .map_err(|e| ReadError::Other(anyhow!(e)))?;
-            if let Some(message) = message {
-                match message {
-                    Message::Text(utf8_bytes) => {
-                        return Ok(ReadData::Binary(Bytes::copy_from_slice(
-                            utf8_bytes.as_bytes(),
-                        )));
-                    }
-                    Message::Binary(bytes) => {
-                        return Ok(ReadData::Binary(bytes));
-                    }
-                    Message::Ping(data) => {
-                        return Ok(ReadData::Custom(WebsocketProto::Ping(data)));
-                    }
-                    Message::Pong(data) => {
-                        return Ok(ReadData::Custom(WebsocketProto::Pong(data)));
-                    }
-                    Message::Close(_) => {
-                        return Err(ReadError::ConnectionClosed);
-                    }
-                    Message::Frame(_) => {
-                        return Err(ReadError::UnexpectedMessage);
-                    }
-                }
+        let message = self
+            .ws_stream
+            .next()
+            .await
+            .transpose()
+            .map_err(|e| ReadError::Other(anyhow!(e)))?;
+        if let Some(message) = message {
+            match message {
+                Message::Text(utf8_bytes) => Ok(ReadData::Binary(Bytes::copy_from_slice(
+                    utf8_bytes.as_bytes(),
+                ))),
+                Message::Binary(bytes) => Ok(ReadData::Binary(bytes)),
+                Message::Ping(data) => Ok(ReadData::Custom(WebsocketProto::Ping(data))),
+                Message::Pong(data) => Ok(ReadData::Custom(WebsocketProto::Pong(data))),
+                Message::Close(_) => Err(ReadError::ConnectionClosed),
+                Message::Frame(_) => Err(ReadError::UnexpectedMessage),
             }
+        } else {
+            Err(ReadError::ConnectionClosed)
         }
     }
 }
